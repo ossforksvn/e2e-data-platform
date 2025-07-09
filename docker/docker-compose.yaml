@@ -32,9 +32,9 @@ services:
 
   # Create bucket in MinIO: create delta bucket
   createbucket:
-    hostname: createbucket
-    container_name: e2e-data-platform-createbucket
     image: minio/mc:RELEASE.2024-01-13T08-44-48Z
+    container_name: e2e-data-platform-createbucket
+    hostname: createbucket
     depends_on:
       - minio
     environment:
@@ -55,9 +55,9 @@ services:
   # OLTP database service: PostgreSQL AdventureWorks database
   # ==================================================
   oltp:
-    hostname: oltp
-    container_name: e2e-data-platform-oltp-adw14
     image: postgres:16-bullseye
+    container_name: e2e-data-platform-oltp-adw14
+    hostname: oltp
     environment:
       POSTGRES_USER: ${OLTP_DB_USER:-adventureworks}
       POSTGRES_PASSWORD: ${OLTP_DB_PASSWORD:-adventureworks}
@@ -82,8 +82,8 @@ services:
   # We use PostgreSQL to store Hive metadata about
   # how the datafile are mapped to schemas and tables
   metastore_db:
-    container_name: e2e-data-platform-metastore-db
     image: postgres:16-bullseye
+    container_name: e2e-data-platform-metastore-db
     hostname: metastore_db
     environment:
       POSTGRES_USER: ${META_DB_USER:-hive}
@@ -106,8 +106,8 @@ services:
   # Expose service to get metadata, which is a repository of metadata about the tables,
   # such as database names, table names, schema and data location of each table
   hive-metastore:
-    container_name: e2e-data-platform-hive-metastore
     image: "starburstdata/hive:3.1.2-e.18"
+    container_name: e2e-data-platform-hive-metastore
     hostname: hive-metastore
     environment:
       HIVE_METASTORE_DRIVER: ${META_DB_DRIVER:-org.postgresql.Driver}
@@ -150,12 +150,12 @@ services:
   # ==================================================
   # Trino coordinator service: client-facing service that accepts incoming queries
   trino:
-    container_name: e2e-data-platform-trino
-    image: "trinodb/trino:455"
-    hostname: trino
-    user: root
     profiles:
       - trino
+    image: "trinodb/trino:455"
+    container_name: e2e-data-platform-trino
+    hostname: trino
+    user: root
     # restart: on-failure
     environment:
       # custom env vars
@@ -198,10 +198,10 @@ services:
 
   # Trino worker service: worker nodes that execute the query
   trino-worker:
-    image: "trinodb/trino:455"
-    container_name: e2e-data-platform-trino-worker
     profiles:
       - trino
+    image: "trinodb/trino:455"
+    container_name: e2e-data-platform-trino-worker
     volumes:
       - ./trino/etc/jvm.config:/etc/trino/jvm.config
       - ./trino/etc/worker.config.properties:/etc/trino/config.properties
@@ -222,12 +222,12 @@ services:
   # use `docker-compose --profile spark up` to start the Spark cluster.
   # ==================================================
   spark-master:
-    hostname: spark-master
-    container_name: e2e-data-platform-spark-master
-    image: bitnami/spark:3.4.1
-    command: bin/spark-class org.apache.spark.deploy.master.Master
     profiles:
       - spark
+    image: bitnami/spark:3.4.1
+    container_name: e2e-data-platform-spark-master
+    hostname: spark-master
+    command: bin/spark-class org.apache.spark.deploy.master.Master
     environment:
       SPARK_MODE: master
       # custom env vars
@@ -253,12 +253,12 @@ services:
       - data-network
 
   spark-worker:
-    hostname: spark-worker
-    image: bitnami/spark:3.4.1
-    container_name: e2e-data-platform-spark-worker
-    command: bin/spark-class org.apache.spark.deploy.worker.Worker ${SPARK_MASTER_URL}
     profiles:
       - spark
+    image: bitnami/spark:3.4.1
+    container_name: e2e-data-platform-spark-worker
+    hostname: spark-worker
+    command: bin/spark-class org.apache.spark.deploy.worker.Worker ${SPARK_MASTER_URL}
     depends_on:
       - spark-master
     environment:
@@ -357,14 +357,14 @@ services:
   # DBT docs service: documentation for dbt models
   # ==================================================
   dbt:
-    image: theweekdays/dbt:0.0.1
-    container_name: e2e-data-platform-dbt
+    profiles:
+      - trino
     build:
       context: ../dbt
       dockerfile: Dockerfile
+    image: theweekdays/dbt:0.0.1
+    container_name: e2e-data-platform-dbt
     hostname: dbt
-    profiles:
-      - trino
     # entrypoint: >
     #   sh -c "dbt docs generate --no-compile"
     volumes:
@@ -383,10 +383,10 @@ services:
   # use `docker-compose --profile certbot up` to start the certbot service.
   # ==================================================
   certbot:
-    image: certbot/certbot
-    container_name: e2e-data-platform-certbot
     profiles:
       - certbot
+    image: certbot/certbot
+    container_name: e2e-data-platform-certbot
     volumes:
       - ./volumes/certbot/conf:/etc/letsencrypt
       - ./volumes/certbot/www:/var/www/html
@@ -406,11 +406,11 @@ services:
   # used for reverse proxying the Trino service and other web service.
   # ==================================================
   nginx:
+    profiles:
+      - trino
     image: nginx:latest
     container_name: e2e-data-platform-nginx
     restart: always
-    profiles:
-      - trino
     volumes:
       - ./nginx/nginx.conf.template:/etc/nginx/nginx.conf.template
       - ./nginx/proxy.conf.template:/etc/nginx/proxy.conf.template
