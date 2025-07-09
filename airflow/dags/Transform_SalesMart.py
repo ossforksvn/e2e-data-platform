@@ -26,7 +26,7 @@ with DAG(
     default_args=default_args,
     schedule_interval='0 19 * * *',
     catchup=False,
-    tags=['egn:trino-dbt', 'src:trino', 'sche:sales']
+    tags=['engine:trino-dbt', 'src:trino', 'sche:sales']
 ) as dag:
 
     # Create a Task Group
@@ -41,7 +41,7 @@ with DAG(
             command=cmd_dim_products,
             cmd_timeout=3600,
         )
-        
+
         # Dim Customers
         cmd_dim_customers = '''
         docker exec dbt bash -c 'dbt run --select dim_customers'
@@ -52,7 +52,7 @@ with DAG(
             command=cmd_dim_customers,
             cmd_timeout=3600,
         )
-        
+
         # Fact Sales
         cmd_fact_sales = '''
         docker exec dbt bash -c 'dbt run --select fact_sales'
@@ -71,7 +71,7 @@ with DAG(
     start_task = DummyOperator(
         task_id='start_task',
     )
-    
+
     finish_task = DummyOperator(
         task_id='finish_task',
     )

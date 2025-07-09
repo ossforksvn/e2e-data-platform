@@ -41,12 +41,12 @@ with DAG(
     default_args=default_args,
     schedule_interval='0 18 * * *',
     catchup=False,
-    tags=['egn:spark', 'src:oltp', 'sche:purchasing']
+    tags=['engine:spark', 'src:oltp', 'sche:purchasing']
 ) as dag:
 
     # Create a Task Group
     with TaskGroup('data_loading_tasks', tooltip='Data Loading from Source Tables') as data_loading_group:
-        
+
         # Dictionary to store task references
         tasks = {}
         s_schema = source_schema['schema']
@@ -54,7 +54,7 @@ with DAG(
         # Loop through the tables in the schema
         for i, s_table in enumerate(source_schema['tables']):
             py_app = f'EL_OLTP_{s_schema[:2]}_{s_table}.py'
-            
+
             # Create the SSH command string
             ssh_command = f'''
             docker exec spark-master bash -c 'spark-submit \
@@ -85,7 +85,7 @@ with DAG(
     start_task = DummyOperator(
         task_id='start_task',
     )
-    
+
     finish_task = DummyOperator(
         task_id='finish_task',
     )
