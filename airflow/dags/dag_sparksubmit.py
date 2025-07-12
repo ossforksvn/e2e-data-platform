@@ -1,7 +1,6 @@
 from airflow import DAG
 from airflow.providers.apache.spark.operators.spark_submit import SparkSubmitOperator
-from datetime import datetime 
-from airflow.providers.ssh.operators.ssh import SSHOperator
+from datetime import datetime
 
 import logging
 from airflow.providers.slack.hooks.slack_webhook import SlackWebhookHook
@@ -28,7 +27,7 @@ def _construct_message(context):
 
 
     msg = """
-    :red_circle: *FAILURE ALERT* 
+    :red_circle: *FAILURE ALERT*
 
     - *Dag*: {dag}
     - *Failed Tasks*: {failed_tasks_list}
@@ -61,37 +60,21 @@ default_args = {
 }
 
 dag = DAG(
-    'spark_job_dag',
+    'spark_submit_job_dag',
     default_args=default_args,
-    schedule_interval='@once',
+    schedule='@once',
 )
 
-# spark_submit_task = SparkSubmitOperator(
-#     application='/opt/airflow/dags/scripts/extract_load.py',  # Path to your Python script on the Airflow server
-#     task_id='spark_submit_task',
-#     conn_id='spark_adw14',  # Connection ID defined in Airflow
-#     executor_cores=1,
-#     executor_memory='2g',
-#     name='airflow-spark-job',
-#     verbose=True,
-#     driver_memory='1g',
-#     dag=dag,
-# )
-
-ssh_command = '''
-docker exec spark-master bash -c 'spark-submit \
-    --master spark://spark-master:7077 \
-    --executor-cores 1 \
-    --executor-memory 1g \
-    --driver-cores 1 \
-    --driver-memory 1g \
-    /opt/spark-apps/extract_load.py'
-'''
-ssh_spark_submit_task = SSHOperator(
-    task_id='ssh_spark_submit_task',
-    ssh_conn_id='ssh_spark_adw14',
-    command=ssh_command,
+spark_submit_task = SparkSubmitOperator(
+    conn_id='spark_adw14',  # Connection ID defined in Airflow
+    task_id='spark_submit_task',
+    name='airflow-spark-job',
+    application='/opt/airflow/dags/scripts/spark_scripts_sayhi.py',  # Path to your Python script on the Airflow server
+    executor_cores=1,
+    executor_memory='2g',
+    driver_memory='1g',
+    verbose=True,
     dag=dag,
 )
 
-ssh_spark_submit_task
+spark_submit_task

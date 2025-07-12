@@ -77,7 +77,7 @@ with DAG(
 
             # Create the SSH command string
             ssh_command = f'''
-            docker exec spark-master bash -c 'spark-submit \
+            docker exec e2e-data-platform-spark-master bash -c 'spark-submit \
                 --master spark://spark-master:7077 \
                 --executor-cores 1 \
                 --executor-memory 1g \

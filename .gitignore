@@ -41,3 +41,9 @@ docker/volumes/*
 
 # airflow
 airflow/config/keyfile/*
+
+# Ignore Derby logs and metastore DB
+notebook/derby.log
+notebook/metastore_db/
+notebook/.ipynb_checkpoints/
+notebook/.Trash-0/

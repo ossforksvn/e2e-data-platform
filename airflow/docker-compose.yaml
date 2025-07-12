@@ -86,6 +86,10 @@ x-airflow-common:
       condition: service_healthy
     # postgres:
     #   condition: service_healthy
+  networks:
+    - data-network
+  extra_hosts:
+    - "host.docker.internal:host-gateway"
 
 services:
   postgres:
@@ -103,6 +107,8 @@ services:
       retries: 5
       start_period: 5s
     restart: always
+    networks:
+      - data-network
 
 # services:
   redis:
@@ -119,15 +125,17 @@ services:
       retries: 50
       start_period: 30s
     restart: always
+    networks:
+      - data-network
 
   airflow-webserver:
     <<: *airflow-common
     container_name: e2e-data-platform-airflow-airflow-webserver
     command: webserver
     ports:
-      - "8080:8080"
+      - "8081:8080"
     healthcheck:
-      test: ["CMD", "curl", "--fail", "http://localhost:8080/health"]
+      test: ["CMD", "curl", "--fail", "http://localhost:8081/health"]
       interval: 30s
       timeout: 10s
       retries: 5
@@ -300,3 +308,12 @@ services:
 
 # volumes:
 #   postgres-db-volume:
+
+# ==================================================
+# Networks configuration
+# data-network: external network for data platform services. This network must be created before running the docker-compose file.
+# use `docker network create --driver bridge data-network` to create the network.
+# ==================================================
+networks:
+  data-network:
+    external: true

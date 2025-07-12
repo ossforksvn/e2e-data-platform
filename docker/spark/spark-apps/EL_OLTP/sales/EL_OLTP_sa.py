@@ -20,7 +20,7 @@ def main(s_schema, s_table):
     s_dbtype = 'postgres'
     # s_schema = 'humanresources'
     # s_table = 'department'
-    
+
     # Destination
     d_bucket = 'delta'
     d_layer = 'bronze'
@@ -45,7 +45,7 @@ def main(s_schema, s_table):
         .config(conf=conf) \
         .enableHiveSupport() \
         .getOrCreate()
-    
+
     jdbc_url = f"jdbc:postgresql://{pg_host}:{pg_port}/{pg_db}"
     properties = {
         "user": f"{pg_user}",
@@ -55,7 +55,7 @@ def main(s_schema, s_table):
     s_table_name = f"{s_schema}.{s_table}"
     df = spark.read.jdbc(url=jdbc_url, table=s_table_name, properties=properties)
 
-    df.show()
+    # df.show()
 
     df.write.format("delta") \
         .mode("overwrite") \

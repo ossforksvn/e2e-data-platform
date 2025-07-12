@@ -144,14 +144,38 @@ services:
     networks:
       - data-network
 
+
+  # ================================================== With profiles below ==================================================
+
+  # ==================================================
+  # Dremio
+  # ==================================================
+  dremio:
+    profiles: ["dremio"]
+    image: dremio/dremio-oss:26.0.0
+    container_name: e2e-data-platform-dremio
+    hostname: dremio
+    restart: always
+    ports:
+      - ${DREMIO_PORT:-9047}:9047   # Web UI / REST API
+      - ${DREMIO_JDBC_PORT:-31010}:31010 # JDBC/ODBC port
+      - ${DREMIO_ARROW_PORT:-32010}:32010 # ARROW Flight port
+      - ${DREMIO_INTERNAL_PORT:-45678}:45678 # Internal communication
+    environment:
+      - DREMIO_JAVA_SERVER_EXTRA_OPTS=-Dpaths.dist=file:///opt/dremio/data/dist
+    # volumes:
+    #   - ./dremio/dist:/opt/dremio/data/dist
+    #   - ./dremio/conf:/opt/dremio/conf
+    networks:
+      - data-network
+
   # ==================================================
   # Trino: distributed SQL query engine for big data
   # Trino cluster service consists of Trino `coordinator` and `worker`
   # ==================================================
   # Trino coordinator service: client-facing service that accepts incoming queries
   trino:
-    profiles:
-      - trino
+    profiles: [ "trino" ]
     image: "trinodb/trino:455"
     container_name: e2e-data-platform-trino
     hostname: trino
@@ -198,8 +222,7 @@ services:
 
   # Trino worker service: worker nodes that execute the query
   trino-worker:
-    profiles:
-      - trino
+    profiles: [ "trino" ]
     image: "trinodb/trino:455"
     container_name: e2e-data-platform-trino-worker
     volumes:
@@ -222,8 +245,7 @@ services:
   # use `docker-compose --profile spark up` to start the Spark cluster.
   # ==================================================
   spark-master:
-    profiles:
-      - spark
+    profiles: [ "spark" ]
     image: bitnami/spark:3.4.1
     container_name: e2e-data-platform-spark-master
     hostname: spark-master
@@ -231,8 +253,8 @@ services:
     environment:
       SPARK_MODE: master
       # custom env vars
+      SPARK_MASTER_WEBUI_PORT_EXPOSE: ${SPARK_MASTER_WEBUI_PORT_EXPOSE:-8080}
       SPARK_MASTER_PORT_EXPOSE: ${SPARK_MASTER_PORT_EXPOSE:-7077}
-      SPARK_MASTER_WEBUI_PORT_EXPOSE: ${SPARK_MASTER_WEBUI_PORT_EXPOSE:-8081}
       # oltp database
       OLTP_DB_HOST: ${OLTP_DB_HOST:-oltp}
       OLTP_DB_PORT: ${OLTP_DB_PORT:-5432}
@@ -240,10 +262,10 @@ services:
       OLTP_DB_USER: ${OLTP_DB_USER:-adventureworks}
       OLTP_DB_PASSWORD: ${OLTP_DB_PASSWORD:-adventureworks}
     volumes:
-      - ./spark/spark-apps:/opt/spark-apps
       - ./spark/spark-config/spark-defaults.conf:/opt/bitnami/spark/conf/spark-defaults.conf
-      - ./spark/spark-config/hive-site.xml:/opt/bitnami/spark/conf/hive-site.xml
       - ./spark/spark-config/core-site.xml:/opt/bitnami/spark/conf/core-site.xml
+      - ./spark/spark-config/hive-site.xml:/opt/bitnami/spark/conf/hive-site.xml
+      - ./spark/spark-apps:/opt/spark-apps
     ports:
       - "${SPARK_MASTER_WEBUI_PORT_EXPOSE}:8080"
       - "${SPARK_MASTER_PORT_EXPOSE}:7077"
@@ -253,8 +275,7 @@ services:
       - data-network
 
   spark-worker:
-    profiles:
-      - spark
+    profiles: [ "spark" ]
     image: bitnami/spark:3.4.1
     container_name: e2e-data-platform-spark-worker
     hostname: spark-worker
@@ -273,11 +294,172 @@ services:
     networks:
       - data-network
 
+  spark-jupyter:
+    profiles: [ "spark-jupyter" ]
+    build:
+      dockerfile: ./spark/Dockerfile-spark3.4
+    image: 1ambda/lakehouse:spark-3.4
+    container_name: e2e-data-platform-spark-jupyter
+    hostname: localhost
+    entrypoint: |
+      /bin/bash -c "
+      jupyter lab --notebook-dir=/opt/notebook --ip='*' --NotebookApp.token='' --NotebookApp.password='' --port=8888 --no-browser --allow-root
+      "
+    ports:
+      - ${SPARK_DRIVER_PORT:-4040}:4040
+      - ${SPARK_JUPYTER_PORT:-8900}:8888
+    depends_on:
+      - minio
+      - hive-metastore
+    environment:
+      # S3_ENDPOINT: ${S3_ENDPOINT:-http://minio:9000}
+      # AWS_ACCESS_KEY_ID: ${AWS_ACCESS_KEY_ID:-minio_access_key}
+      # AWS_SECRET_ACCESS_KEY: ${AWS_SECRET_ACCESS_KEY:-minio_secret_key}
+      # AWS_DEFAULT_REGION: ${AWS_DEFAULT_REGION:-}
+      # AWS_REGION: ${AWS_REGION:-}
+      # S3_PATH_STYLE_ACCESS: ${S3_PATH_STYLE_ACCESS:-true}
+
+      # oltp database
+      OLTP_DB_HOST: ${OLTP_DB_HOST:-oltp}
+      OLTP_DB_PORT: ${OLTP_DB_PORT:-5432}
+      OLTP_DB_NAME: ${OLTP_DB_NAME:-adventureworks}
+      OLTP_DB_USER: ${OLTP_DB_USER:-adventureworks}
+      OLTP_DB_PASSWORD: ${OLTP_DB_PASSWORD:-adventureworks}
+    volumes:
+      - ./spark/spark-config/spark-defaults.conf:/opt/spark/conf/spark-defaults.conf
+      - ./spark/spark-config/core-site.xml:/opt/spark/conf/core-site.xml
+      - ./spark/spark-config/hive-site.xml:/opt/spark/conf/hive-site.xml
+      - ./jupyter/jupyter_server_config.py:/root/.jupyter/jupyter_server_config.py
+      - ./jupyter/themes.jupyterlab-settings:/root/.jupyter/lab/user-settings/@jupyterlab/apputils-extension/themes.jupyterlab-settings
+      - ../notebook:/opt/notebook
+    networks:
+      - data-network
+
+  spark-iceberg-jupyter:
+    profiles: [ "spark-iceberg-jupyter" ]
+    build:
+      dockerfile: ./spark/Dockerfile-spark3.4
+    image: 1ambda/lakehouse:spark-3.4
+    container_name: e2e-data-platform-spark-iceberg-jupyter
+    hostname: localhost
+    entrypoint: |
+      /bin/bash -c "
+      jupyter lab --notebook-dir=/opt/notebook --ip='*' --NotebookApp.token='' --NotebookApp.password='' --port=8888 --no-browser --allow-root
+      "
+    ports:
+      - ${SPARK_ICEBERG_DRIVER_PORT:-4041}:4040
+      - ${SPARK_ICEBERG_JUPYTER_PORT:-8901}:8888
+    depends_on:
+      - minio
+      - hive-metastore
+    environment:
+      AWS_ACCESS_KEY_ID: ${AWS_ACCESS_KEY_ID:-minio_access_key}
+      AWS_SECRET_ACCESS_KEY: ${AWS_SECRET_ACCESS_KEY:-minio_secret_key}
+      AWS_REGION: ${AWS_REGION:-us-east-1}
+      AWS_DEFAULT_REGION: ${AWS_DEFAULT_REGION:-us-east-1}
+      S3_ENDPOINT: ${S3_ENDPOINT:-http://minio:9000}
+      S3_PATH_STYLE_ACCESS: ${S3_PATH_STYLE_ACCESS:-true}
+    volumes:
+      - ./spark/spark-defaults-iceberg.conf:/opt/spark/conf/spark-defaults.conf
+      - ./jupyter/jupyter_server_config.py:/root/.jupyter/jupyter_server_config.py
+      - ./jupyter/themes.jupyterlab-settings:/root/.jupyter/lab/user-settings/@jupyterlab/apputils-extension/themes.jupyterlab-settings
+      - ../notebook:/opt/notebook
+    networks:
+      - data-network
+
+  ####################################################################################################
+  # Flink
+  ####################################################################################################
+  flink-jobmanager:
+    profiles: [ "flink" ]
+    build:
+      dockerfile: ./flink/Dockerfile-flink1.16
+    image: 1ambda/lakehouse:flink-1.16
+    container_name: lakehouse-playground-flink-jobmanager
+    hostname: flink-jobmanager
+    entrypoint: |
+      /bin/bash -c "
+      export HADOOP_CLASSPATH=`/opt/hadoop/bin/hadoop classpath`;
+      /docker-entrypoint.sh jobmanager;
+      "
+    working_dir: /opt/flink
+    ports:
+      - "8082:8081"
+      - "6123:6123"
+    environment:
+      - AWS_ACCESS_KEY_ID=minio
+      - AWS_SECRET_ACCESS_KEY=minio123
+      - AWS_REGION=us-east-1
+      - AWS_DEFAULT_REGION=us-east-1
+      - S3_ENDPOINT=http://minio:9000
+      - S3_PATH_STYLE_ACCESS=true
+      - |
+        FLINK_PROPERTIES=
+        fs.s3a.impl: org.apache.hadoop.fs.s3a.S3AFileSystem
+        fs.s3a.access.key: minio
+        fs.s3a.secret.key: minio123
+        fs.s3a.endpoint: http://minio:9000
+        fs.s3a.path.style.access: true
+        jobmanager.rpc.address: flink-jobmanager
+        state.backend: rocksdb
+        state.backend.incremental: true
+        state.checkpoints.dir: s3a://datalake/flink/cluster-common/checkpoints/
+        state.savepoints.dir: s3a://datalake/flink/cluster-common/savepoints/
+    volumes:
+      - ./flink/hadoop-core-site.xml:/opt/hadoop/etc/hadoop/core-site.xml
+      - ./flink/hadoop-hive-site.xml:/opt/flink/conf/hive-site.xml
+      - ./flink/flink-sql-hudi.sh:/opt/flink-client/flink-sql-hudi
+      - ./flink/flink-init-hudi.sql:/opt/flink-client/flink-init-hudi.sql
+      - ./flink/flink-sql-iceberg.sh:/opt/flink-client/flink-sql-iceberg
+      - ./flink/flink-init-iceberg.sql:/opt/flink-client/flink-init-iceberg.sql
+
+  flink-taskmanager:
+    profiles: [ "flink" ]
+    build:
+      dockerfile: ./flink/Dockerfile-flink1.16
+    image: 1ambda/lakehouse:flink-1.16
+    container_name: lakehouse-playground-flink-taskmanager
+    hostname: flink-taskmanager
+    entrypoint: |
+      /bin/bash -c "
+      export HADOOP_CLASSPATH=`/opt/hadoop//bin/hadoop classpath`;
+      /docker-entrypoint.sh taskmanager;
+      "
+    working_dir: /opt/flink
+    environment:
+      - AWS_ACCESS_KEY_ID=minio
+      - AWS_SECRET_ACCESS_KEY=minio123
+      - AWS_REGION=us-east-1
+      - AWS_DEFAULT_REGION=us-east-1
+      - S3_ENDPOINT=http://minio:9000
+      - S3_PATH_STYLE_ACCESS=true
+      - |
+        FLINK_PROPERTIES=
+        fs.s3a.impl: org.apache.hadoop.fs.s3a.S3AFileSystem
+        fs.s3a.access.key: minio
+        fs.s3a.secret.key: minio123
+        fs.s3a.endpoint: http://minio:9000
+        fs.s3a.path.style.access: true
+        jobmanager.rpc.address: flink-jobmanager
+        taskmanager.numberOfTaskSlots: 8
+        parallelism.default: 1
+        state.backend: rocksdb
+        state.backend.incremental: true
+        state.checkpoints.dir: s3a://datalake/flink/cluster-common/checkpoints/
+        state.savepoints.dir: s3a://datalake/flink/cluster-common/savepoints/
+    volumes:
+      - ./flink/hadoop-core-site.xml:/opt/hadoop/etc/hadoop/core-site.xml
+      - ./flink/hadoop-hive-site.xml:/opt/flink/conf/hive-site.xml
+    depends_on:
+      - flink-jobmanager
+
+
   # ==================================================
   # Lightdash service: BI tool for data exploration
   # use `docker-compose --profile lightdash up` to start the Lightdash service.
   # ==================================================
   lightdash:
+    profiles: [ "lightdash" ]
     platform: linux/amd64
     image: lightdash/lightdash:latest
     container_name: e2e-data-platform-lightdash
@@ -330,8 +512,9 @@ services:
       - data-network
 
   lightdash-db:
-    container_name: e2e-data-platform-lightdash-db
+    profiles: [ "lightdash" ]
     image: postgres:15.4
+    container_name: e2e-data-platform-lightdash-db
     restart: always
     environment:
       POSTGRES_PASSWORD: ${LD_PGPASSWORD:-lightdash}
@@ -345,6 +528,7 @@ services:
       - data-network
 
   headless-browser:
+    profiles: [ "lightdash" ]
     image: browserless/chrome
     container_name: e2e-data-platform-headless-browser
     restart: always
@@ -357,8 +541,7 @@ services:
   # DBT docs service: documentation for dbt models
   # ==================================================
   dbt:
-    profiles:
-      - trino
+    profiles: [ "trino" ]
     build:
       context: ../dbt
       dockerfile: Dockerfile
@@ -383,8 +566,7 @@ services:
   # use `docker-compose --profile certbot up` to start the certbot service.
   # ==================================================
   certbot:
-    profiles:
-      - certbot
+    profiles: [ "certbot" ]
     image: certbot/certbot
     container_name: e2e-data-platform-certbot
     volumes:
@@ -406,8 +588,7 @@ services:
   # used for reverse proxying the Trino service and other web service.
   # ==================================================
   nginx:
-    profiles:
-      - trino
+    profiles: [ "trino" ]
     image: nginx:latest
     container_name: e2e-data-platform-nginx
     restart: always

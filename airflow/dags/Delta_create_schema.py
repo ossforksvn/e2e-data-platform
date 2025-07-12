@@ -1,5 +1,5 @@
 from airflow import DAG
-from datetime import datetime 
+from datetime import datetime
 from airflow.providers.ssh.operators.ssh import SSHOperator
 from datetime import datetime, timedelta
 import logging
@@ -20,14 +20,14 @@ dag = DAG(
     schedule_interval='30 16 * * *',
     catchup=False
 )
- 
+
 # Source:
 # s_schema = 'humanresources'
 # s_table = 'department'
 # py_app = f'EL_OLTP_{s_schema[:2]}_{s_table}.py'
 
 ssh_command = f'''
-docker exec spark-master bash -c 'spark-submit \
+docker exec e2e-data-platform-spark-master bash -c 'spark-submit \
     --master spark://spark-master:7077 \
     --executor-cores 1 \
     --executor-memory 1g \
