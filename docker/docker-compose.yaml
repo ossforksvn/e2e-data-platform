@@ -46,7 +46,8 @@ services:
     entrypoint: >
       /bin/sh -c "
       /usr/bin/mc alias set myminio ${MINIO_ENDPOINT} ${MINIO_ACCESS_KEY} ${MINIO_SECRET_KEY};
-      /usr/bin/mc mb myminio/delta;
+      /usr/bin/mc mb --quiet myminio/delta || true;
+      /usr/bin/mc mb --quiet myminio/iceberg || true;
       "
     networks:
       - data-network
@@ -81,10 +82,10 @@ services:
   # ==================================================
   # We use PostgreSQL to store Hive metadata about
   # how the datafile are mapped to schemas and tables
-  metastore_db:
+  hive_metastore_db:
     image: postgres:16-bullseye
-    container_name: e2e-data-platform-metastore-db
-    hostname: metastore_db
+    container_name: e2e-data-platform-hive-metastore-db
+    hostname: hive_metastore_db
     environment:
       POSTGRES_USER: ${META_DB_USER:-hive}
       POSTGRES_PASSWORD: ${META_DB_PASSWORD:-hive}
@@ -111,7 +112,7 @@ services:
     hostname: hive-metastore
     environment:
       HIVE_METASTORE_DRIVER: ${META_DB_DRIVER:-org.postgresql.Driver}
-      HIVE_METASTORE_JDBC_URL: ${META_DB_URL:-jdbc:postgresql://metastore_db:5432/metastore}
+      HIVE_METASTORE_JDBC_URL: ${META_DB_URL:-jdbc:postgresql://hive_metastore_db:5432/metastore}
       HIVE_METASTORE_USER: ${META_DB_USER:-hive}
       HIVE_METASTORE_PASSWORD: ${META_DB_PASSWORD:-hive}
       HIVE_METASTORE_WAREHOUSE_DIR: ${WAREHOUSE_DIR:-s3://delta}
@@ -138,8 +139,10 @@ services:
       HIVE_METASTORE_PORT_EXPOSE: ${HIVE_METASTORE_PORT_EXPOSE:-9083}
     ports:
       - "${HIVE_METASTORE_PORT_EXPOSE}:9083"
+    volumes:
+      - ./dremio/config/core-site.xml:/opt/dremio/conf/core-site.xml
     depends_on:
-      - metastore_db
+      - hive_metastore_db
       - minio
     networks:
       - data-network
@@ -155,7 +158,7 @@ services:
     image: dremio/dremio-oss:26.0.0
     container_name: e2e-data-platform-dremio
     hostname: dremio
-    restart: always
+    restart: unless-stopped
     ports:
       - ${DREMIO_PORT:-9047}:9047   # Web UI / REST API
       - ${DREMIO_JDBC_PORT:-31010}:31010 # JDBC/ODBC port
@@ -163,9 +166,11 @@ services:
       - ${DREMIO_INTERNAL_PORT:-45678}:45678 # Internal communication
     environment:
       - DREMIO_JAVA_SERVER_EXTRA_OPTS=-Dpaths.dist=file:///opt/dremio/data/dist
-    # volumes:
-    #   - ./dremio/dist:/opt/dremio/data/dist
-    #   - ./dremio/conf:/opt/dremio/conf
+    volumes:
+      - ./dremio/config/core-site.xml:/opt/dremio/conf/core-site.xml
+      # - ./volumes/dremio/data/db:/opt/dremio/data/db
+      # - ./volumes/dremio/data/logs:/opt/dremio/data/logs
+      # - ./volumes/dremio/data/dist:/opt/dremio/data/dist
     networks:
       - data-network
 
@@ -515,7 +520,7 @@ services:
     profiles: [ "lightdash" ]
     image: postgres:15.4
     container_name: e2e-data-platform-lightdash-db
-    restart: always
+    restart: unless-stopped
     environment:
       POSTGRES_PASSWORD: ${LD_PGPASSWORD:-lightdash}
       POSTGRES_USER: ${LD_PGUSER:-lightdash}
@@ -531,7 +536,7 @@ services:
     profiles: [ "lightdash" ]
     image: browserless/chrome
     container_name: e2e-data-platform-headless-browser
-    restart: always
+    restart: unless-stopped
     ports:
       - "3001:3000"
     networks:
@@ -541,7 +546,7 @@ services:
   # DBT docs service: documentation for dbt models
   # ==================================================
   dbt:
-    profiles: [ "trino" ]
+    profiles: [ "dbt" ]
     build:
       context: ../dbt
       dockerfile: Dockerfile
@@ -551,13 +556,8 @@ services:
     # entrypoint: >
     #   sh -c "dbt docs generate --no-compile"
     volumes:
-      - ../dbt:/usr/src/dbt # dbt project source code directory
       - ./volumes/dbt:/usr/dbt/target
-    depends_on:
-      trino:
-        condition: service_healthy
-      nginx:
-        condition: service_healthy
+      - ../dbt:/usr/src/dbt # dbt project source code directory
     networks:
       - data-network
 
@@ -591,7 +591,7 @@ services:
     profiles: [ "trino" ]
     image: nginx:latest
     container_name: e2e-data-platform-nginx
-    restart: always
+    restart: unless-stopped
     volumes:
       - ./nginx/nginx.conf.template:/etc/nginx/nginx.conf.template
       - ./nginx/proxy.conf.template:/etc/nginx/proxy.conf.template
