@@ -588,7 +588,7 @@ services:
   # used for reverse proxying the Trino service and other web service.
   # ==================================================
   nginx:
-    profiles: [ "trino" ]
+    profiles: [ "nginx" ]
     image: nginx:latest
     container_name: e2e-data-platform-nginx
     restart: unless-stopped
